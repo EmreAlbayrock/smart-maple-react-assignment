@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import type { Action } from "redux-actions";
 
-import { put, debounce } from "redux-saga/effects";
+import { debounce, put } from "redux-saga/effects";
 
-import types from "../auth/types";
-import Logger from "../../utils/logger";
-import * as actions from "../auth/actions";
 import { profileResponse } from "../../constants/api";
+import Logger from "../../utils/logger";
 import AuthSession from "../../utils/session";
-import { updateProgress } from "../ui/actions";
 import type { Callbacks } from "../../utils/types";
+import * as actions from "../auth/actions";
+import types from "../auth/types";
+import { updateProgress } from "../ui/actions";
 
 const QUERY_DEBOUNCE = 1000;
 
@@ -27,7 +27,8 @@ function* asyncLogin({
     AuthSession.setPhoneNumber(response.data!.phoneNumber);
     AuthSession.setOrganizationId(response.data!.organizationId);
     AuthSession.setDepartmentId(response.data!.currentDepartmentId);
-    AuthSession.setRoles(`${response.data!.role}`);
+    // Burada role nesnesi yerine sadece ismi alıyoruz
+    AuthSession.setRoles(response.data!.role.name);
     AuthSession.setLanguage(response.data.language);
 
     onSuccess && onSuccess(response);
@@ -40,8 +41,6 @@ function* asyncLogin({
   }
 }
 
-const authSagas = [
-  debounce(QUERY_DEBOUNCE, types.SIGNIN, asyncLogin),
-];
+const authSagas = [debounce(QUERY_DEBOUNCE, types.SIGNIN, asyncLogin)];
 
 export default authSagas;
