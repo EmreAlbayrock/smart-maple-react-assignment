@@ -1,14 +1,14 @@
-import Storage from "../utils/storage";
 import {
-  SESSION_KEY_ID,
-  SESSION_KEY_NAME,
-  SESSION_KEY_EMAIL,
-  SESSION_KEY_ROLES,
-  SESSION_KEY_LANGUAGE,
-  SESSION_KEY_PHONE_NUMBER,
   SESSION_KEY_DEPARTMENT_ID,
+  SESSION_KEY_EMAIL,
+  SESSION_KEY_ID,
+  SESSION_KEY_LANGUAGE,
+  SESSION_KEY_NAME,
   SESSION_KEY_ORGANIZATION_ID,
+  SESSION_KEY_PHONE_NUMBER,
+  SESSION_KEY_ROLES,
 } from "../constants/common";
+import Storage from "../utils/storage";
 
 class AuthSession {
   static sessionKey_id = SESSION_KEY_ID;
@@ -36,7 +36,8 @@ class AuthSession {
     return Storage.get(AuthSession.sessionKey_phone_number);
   }
 
-  static getRoles(): number {
+  // number değil string olarak döndürüyoruz
+  static getRoles(): string {
     return Storage.get(AuthSession.sessionKey_roles);
   }
 
