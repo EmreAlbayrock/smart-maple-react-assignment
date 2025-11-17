@@ -17,11 +17,15 @@ import type { EventClickArg, EventInput } from "@fullcalendar/core/index.js";
 import "../profileCalendar.scss";
 
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import utc from "dayjs/plugin/utc";
 
 dayjs.extend(utc);
 dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(customParseFormat);
 
 type CalendarContainerProps = {
   schedule: ScheduleInstance;
@@ -107,13 +111,12 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
 
   const getDatesBetween = (startDate: string, endDate: string) => {
     const dates = [];
-    const start = dayjs(startDate, "DD.MM.YYYY").toDate();
-    const end = dayjs(endDate, "DD.MM.YYYY").toDate();
-    const current = new Date(start);
+    const start = dayjs(startDate, "DD.MM.YYYY", true).toDate();
+    const end = dayjs(endDate, "DD.MM.YYYY", true).toDate();
 
-    while (current <= end) {
-      dates.push(dayjs(current).format("DD-MM-YYYY"));
-      current.setDate(current.getDate() + 1);
+    while (start <= end) {
+      dates.push(dayjs(start).format("DD-MM-YYYY"));
+      start.setDate(start.getDate() + 1);
     }
 
     return dates;
@@ -163,15 +166,36 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
     const offDays = schedule?.staffs?.find(
       (staff) => staff.id === selectedStaffId
     )?.offDays;
+
     const dates = getDatesBetween(
       dayjs(schedule.scheduleStartDate).format("DD.MM.YYYY"),
       dayjs(schedule.scheduleEndDate).format("DD.MM.YYYY")
     );
-    let highlightedDates: string[] = [];
+    const highlightedDates: string[] = [];
+
+    const staff = schedule?.staffs?.find((s) => s.id === selectedStaffId);
 
     dates.forEach((date) => {
-      const transformedDate = dayjs(date, "DD-MM-YYYY").format("DD.MM.YYYY");
-      if (offDays?.includes(transformedDate)) highlightedDates.push(date);
+      const currentDate = dayjs(date, "DD-MM-YYYY");
+      const transformedDate = currentDate.format("DD.MM.YYYY");
+
+      if (offDays?.includes(transformedDate)) {
+        return;
+      }
+
+      const isInPairList = staff?.pairList?.some((pair) => {
+        const pairStart = dayjs(pair.startDate, "DD.MM.YYYY");
+        const pairEnd = dayjs(pair.endDate, "DD.MM.YYYY");
+
+        return (
+          currentDate.isSameOrAfter(pairStart, "day") &&
+          currentDate.isSameOrBefore(pairEnd, "day")
+        );
+      });
+
+      if (isInPairList) {
+        highlightedDates.push(date);
+      }
     });
 
     setHighlightedDates(highlightedDates);
@@ -185,8 +209,8 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
     const shift = getShiftById(event.extendedProps.shiftId);
 
     const details: EventDetails = {
-      staffName: staff?.name || "Bilinmeyen Personel",
-      shiftName: shift?.name || "Bilinmeyen Vardiya",
+      staffName: staff?.name || "",
+      shiftName: shift?.name || "",
       date: dayjs(event.start).format("DD.MM.YYYY"),
       startTime: dayjs(event.extendedProps.shiftStart).format("HH:mm"),
       endTime: dayjs(event.extendedProps.shiftEnd).format("HH:mm"),
@@ -298,8 +322,8 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
             return (
               <div
                 className={`${found ? "" : "date-range-disabled"} ${
-                  isHighlighted ? "highlighted-date-orange" : ""
-                } highlightedPair`}
+                  isHighlighted ? "highlightedPair" : ""
+                }`}
               >
                 {dayjs(date).date()}
               </div>
