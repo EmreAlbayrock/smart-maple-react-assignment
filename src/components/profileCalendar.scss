@@ -1,9 +1,16 @@
+body {
+  padding: 0;
+  margin: 0;
+}
+
 .profile-calendar-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
   padding: 20px;
-  background-color: #f9f9f9;
+  background-color: #f0f0f0;
+  height: 100vh;
+  overflow: auto;
 }
 
 .profile-section {
@@ -25,11 +32,6 @@
   padding: 16px;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  /* height: 100%; */
-}
-
-.calendar-wrapper {
-  min-height: 400px;
 }
 
 .staff-calendar-container {
@@ -401,9 +403,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    background: #ffffff;
-    color: #19979c;
-    border: 1px solid #19979c;
+    border: 1px solid;
     border-radius: 8px;
     text-transform: capitalize;
     transition: all 0.3s;
@@ -413,24 +413,25 @@
       transition: all 0.3s;
     }
 
-    &.active {
-      background: #19979c;
-      color: #ffffff;
-
-      svg path {
-        fill: #ffffff;
-      }
-    }
-
     p {
       color: inherit;
     }
   }
+
+  .staff:hover {
+    box-shadow: 0px 0px 5px;
+  }
+}
+
+.fc-event-main {
+  text-align: center;
 }
 
 .highlightedPair {
-  content: "";
-  border-bottom: 5px solid rgba(194, 6, 138, 0.5) !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 20px;
 }
 
 .event-modal-overlay {

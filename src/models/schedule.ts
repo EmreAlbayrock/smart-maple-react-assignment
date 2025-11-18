@@ -32,7 +32,11 @@ export type ScheduleInstance = {
       weekendRate: number;
       holidayRate: number;
     };
-    pairList?: any[];
+    pairList?: Array<{
+      staffId: string;
+      startDate: string;
+      endDate: string;
+    }>;
   }>;
   assignments: Array<{
     id: string;
