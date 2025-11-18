@@ -1,5 +1,4 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable prefer-const */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useRef, useState } from "react";
@@ -41,35 +40,13 @@ type EventDetails = {
   color: string;
 } | null;
 
-// Her çalışan için renk üretme fonksiyonu
-const generateStaffColor = (staffId: string): string => {
-  let hash = 0;
-  for (let i = 0; i < staffId.length; i++) {
-    hash = staffId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 50%, 55%)`;
-};
-
-// Shift tipine göre renk tonunu ayarlama
-const getEventColor = (baseColor: string, shiftName: string): string => {
-  const hslMatch = baseColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-  if (!hslMatch) return baseColor;
-
-  const hue = hslMatch[1];
-  const saturation = hslMatch[2];
-
-  const isNightShift = shiftName?.toLowerCase().includes("night");
-  const lightness = isNightShift ? 25 : 50; // Gece: koyu, Gündüz: açık
-
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-};
-
 const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
   const calendarRef = useRef<FullCalendar>(null);
 
   const [events, setEvents] = useState<EventInput[]>([]);
-  const [highlightedDates, setHighlightedDates] = useState<string[]>([]);
+  const [highlightedDates, setHighlightedDates] = useState<
+    { pairStaffId: string; date: string }[]
+  >([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffColors, setStaffColors] = useState<Map<string, string>>(
     new Map()
@@ -81,6 +58,31 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
     const plugins = [dayGridPlugin];
     plugins.push(interactionPlugin);
     return plugins;
+  };
+
+  // Her çalışan için renk üretme fonksiyonu
+  const generateStaffColor = (staffId: string): string => {
+    let hash = 0;
+    for (let i = 0; i < staffId.length; i++) {
+      hash = staffId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+
+    return `hsl(${hue}, 50%, 55%)`;
+  };
+
+  // Shift tipine göre renk tonunu ayarlama
+  const getEventColor = (baseColor: string, shiftName: string): string => {
+    const hslMatch = baseColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (!hslMatch) return baseColor;
+
+    const hue = hslMatch[1];
+    const saturation = hslMatch[2];
+
+    const isNightShift = shiftName?.toLowerCase().includes("night");
+    const lightness = isNightShift ? 25 : 50;
+
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
   };
 
   const getShiftById = (id: string) => {
@@ -171,7 +173,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
       dayjs(schedule.scheduleStartDate).format("DD.MM.YYYY"),
       dayjs(schedule.scheduleEndDate).format("DD.MM.YYYY")
     );
-    const highlightedDates: string[] = [];
+    const highlightedDates: { pairStaffId: string; date: string }[] = [];
 
     const staff = schedule?.staffs?.find((s) => s.id === selectedStaffId);
 
@@ -183,7 +185,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
         return;
       }
 
-      const isInPairList = staff?.pairList?.some((pair) => {
+      const pairList = staff?.pairList?.find((pair) => {
         const pairStart = dayjs(pair.startDate, "DD.MM.YYYY");
         const pairEnd = dayjs(pair.endDate, "DD.MM.YYYY");
 
@@ -193,8 +195,8 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
         );
       });
 
-      if (isInPairList) {
-        highlightedDates.push(date);
+      if (pairList) {
+        highlightedDates.push({ pairStaffId: pairList.staffId, date });
       }
     });
 
@@ -293,10 +295,11 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
           ref={calendarRef}
           locale={auth.language}
           plugins={getPlugins()}
-          contentHeight={400}
+          contentHeight={500}
           handleWindowResize={true}
           selectable={true}
           editable={true}
+          eventChange={(event) => console.log(event.event.id)}
           eventOverlap={true}
           eventDurationEditable={false}
           initialView="dayGridMonth"
@@ -315,15 +318,30 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
             const found = validDates().includes(
               dayjs(date).format("YYYY-MM-DD")
             );
-            const isHighlighted = highlightedDates.includes(
-              dayjs(date).format("DD-MM-YYYY")
+
+            const isHighlighted = highlightedDates.some(
+              (item) => item.date === dayjs(date).format("DD-MM-YYYY")
             );
+
+            let highlightColor = "";
+
+            if (isHighlighted) {
+              const pairStaffId = highlightedDates.find(
+                (item) => item.date === dayjs(date).format("DD-MM-YYYY")
+              )!.pairStaffId;
+              highlightColor = generateStaffColor(pairStaffId);
+            }
 
             return (
               <div
                 className={`${found ? "" : "date-range-disabled"} ${
                   isHighlighted ? "highlightedPair" : ""
                 }`}
+                style={{
+                  borderBottom: isHighlighted
+                    ? `5px solid ${highlightColor}`
+                    : "",
+                }}
               >
                 {dayjs(date).date()}
               </div>
@@ -389,7 +407,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
                   >
                     <path d="M320-280q17 0 28.5-11.5T360-320q0-17-11.5-28.5T320-360q-17 0-28.5 11.5T280-320q0 17 11.5 28.5T320-280Zm0-160q17 0 28.5-11.5T360-480q0-17-11.5-28.5T320-520q-17 0-28.5 11.5T280-480q0 17 11.5 28.5T320-440Zm0-160q17 0 28.5-11.5T360-640q0-17-11.5-28.5T320-680q-17 0-28.5 11.5T280-640q0 17 11.5 28.5T320-600Zm160 320q17 0 28.5-11.5T520-320q0-17-11.5-28.5T480-360q-17 0-28.5 11.5T440-320q0 17 11.5 28.5T480-280Zm0-160q17 0 28.5-11.5T520-480q0-17-11.5-28.5T480-520q-17 0-28.5 11.5T440-480q0 17 11.5 28.5T480-440Zm0-160q17 0 28.5-11.5T520-640q0-17-11.5-28.5T480-680q-17 0-28.5 11.5T440-640q0 17 11.5 28.5T480-600Zm160 320q17 0 28.5-11.5T680-320q0-17-11.5-28.5T640-360q-17 0-28.5 11.5T600-320q0 17 11.5 28.5T640-280Zm0-160q17 0 28.5-11.5T680-480q0-17-11.5-28.5T640-520q-17 0-28.5 11.5T600-480q0 17 11.5 28.5T640-440Zm0-160q17 0 28.5-11.5T680-640q0-17-11.5-28.5T640-680q-17 0-28.5 11.5T600-640q0 17 11.5 28.5T640-600ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-80h80v80h320v-80h80v80h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Z" />
                   </svg>
-                  Shfit Name
+                  Shift Name
                 </div>
                 <div className="event-modal-value">
                   {eventDetails.shiftName}
