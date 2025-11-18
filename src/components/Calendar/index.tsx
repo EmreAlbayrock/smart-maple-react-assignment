@@ -1,8 +1,12 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useRef, useState } from "react";
-
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ScheduleInstance } from "../../models/schedule";
 import type { UserInstance } from "../../models/user";
 
@@ -43,6 +47,35 @@ type EventDetails = {
   color: string;
 } | null;
 
+const getPlugins = () => [dayGridPlugin, interactionPlugin];
+
+const generateStaffColor = (staffId: string): string => {
+  let hash = 0;
+  for (let i = 0; i < staffId.length; i++) {
+    hash = staffId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 50%, 55%)`;
+};
+
+const getEventColor = (baseColor: string, shiftName: string): string => {
+  const hslMatch = baseColor.match(/hsl\((\d+),\s*(\d+)%\s*,\s*(\d+)%\)/);
+  if (!hslMatch) return baseColor;
+  const hue = hslMatch[1];
+  const saturation = hslMatch[2];
+
+  const isNightShift = shiftName?.toLowerCase().includes("night");
+  const lightness = isNightShift ? 25 : 50;
+
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
+
+const RenderEventContent = React.memo(({ eventInfo }: any) => (
+  <div className="event-content">
+    <p>{eventInfo.event.title}</p>
+  </div>
+));
+
 const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
   const calendarRef = useRef<FullCalendar>(null);
 
@@ -51,175 +84,134 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
     { pairStaffId: string; date: string }[]
   >([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [staffColors, setStaffColors] = useState<Map<string, string>>(
-    new Map()
-  );
   const [showModal, setShowModal] = useState(false);
   const [eventDetails, setEventDetails] = useState<EventDetails>(null);
 
   const dispatch = useDispatch();
 
-  const getPlugins = () => {
-    const plugins = [dayGridPlugin];
-    plugins.push(interactionPlugin);
-    return plugins;
-  };
-
-  // Her çalışan için renk üretme fonksiyonu
-  const generateStaffColor = (staffId: string): string => {
-    let hash = 0;
-    for (let i = 0; i < staffId.length; i++) {
-      hash = staffId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash % 360);
-
-    return `hsl(${hue}, 50%, 55%)`;
-  };
-
-  // Shift tipine göre renk tonunu ayarlama
-  const getEventColor = (baseColor: string, shiftName: string): string => {
-    const hslMatch = baseColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-    if (!hslMatch) return baseColor;
-
-    const hue = hslMatch[1];
-    const saturation = hslMatch[2];
-
-    const isNightShift = shiftName?.toLowerCase().includes("night");
-    const lightness = isNightShift ? 25 : 50;
-
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-  };
-
-  // Event taşıma handler'ı
-  const handleEventDrop = (info: any) => {
-    const assignmentId = info.event.id;
-    const newDate = dayjs(info.event.start);
-
-    const shift = getShiftById(info.event.extendedProps.shiftId);
-
-    if (!shift) return;
-
-    const [startHour, startMinute] = shift.shiftStart.split(":");
-    const [endHour, endMinute] = shift.shiftEnd.split(":");
-
-    const newShiftStart = newDate
-      .hour(parseInt(startHour))
-      .minute(parseInt(startMinute))
-      .second(0)
-      .toISOString();
-
-    const newShiftEnd = newDate
-      .hour(parseInt(endHour))
-      .minute(parseInt(endMinute))
-      .second(0)
-      .toISOString();
-
-    dispatch(
-      updateAssignmentDate(assignmentId, newShiftStart, newShiftEnd) as any
-    );
-  };
-
-  const getShiftById = (id: string) => {
-    return schedule?.shifts?.find((shift: { id: string }) => id === shift.id);
-  };
-
-  const getAssigmentById = (id: string) => {
-    return schedule?.assignments?.find((assign) => id === assign.id);
-  };
-
-  const getStaffById = (id: string) => {
-    return schedule?.staffs?.find((staff) => staff.id === id);
-  };
-
-  const validDates = () => {
-    const dates = [];
+  const validDatesMemo = useMemo(() => {
+    if (!schedule?.scheduleStartDate || !schedule?.scheduleEndDate) return [];
+    const dates: string[] = [];
     let currentDate = dayjs(schedule.scheduleStartDate);
-    while (
-      currentDate.isBefore(schedule.scheduleEndDate) ||
-      currentDate.isSame(schedule.scheduleEndDate)
-    ) {
+    const endDate = dayjs(schedule.scheduleEndDate);
+    while (currentDate.isBefore(endDate) || currentDate.isSame(endDate)) {
       dates.push(currentDate.format("YYYY-MM-DD"));
       currentDate = currentDate.add(1, "day");
     }
-
     return dates;
-  };
+  }, [schedule?.scheduleStartDate, schedule?.scheduleEndDate]);
 
-  const getDatesBetween = (startDate: string, endDate: string) => {
-    const dates = [];
-    const start = dayjs(startDate, "DD.MM.YYYY", true).toDate();
-    const end = dayjs(endDate, "DD.MM.YYYY", true).toDate();
+  const shiftsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    schedule?.shifts?.forEach((s: any) => map.set(s.id, s));
+    return map;
+  }, [schedule?.shifts]);
 
-    while (start <= end) {
-      dates.push(dayjs(start).format("DD-MM-YYYY"));
-      start.setDate(start.getDate() + 1);
+  const staffMap = useMemo(() => {
+    const map = new Map<string, any>();
+    schedule?.staffs?.forEach((s: any) => map.set(s.id, s));
+    return map;
+  }, [schedule?.staffs]);
+
+  const assignmentsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    schedule?.assignments?.forEach((a: any) => map.set(a.id, a));
+    return map;
+  }, [schedule?.assignments]);
+
+  const staffColors = useMemo(() => {
+    const map = new Map<string, string>();
+    schedule?.staffs?.forEach((staff: any) => {
+      map.set(staff.id, generateStaffColor(staff.id));
+    });
+    return map;
+  }, [schedule?.staffs]);
+
+  const getShiftById = useCallback(
+    (id?: string) => shiftsMap.get(id || ""),
+    [shiftsMap]
+  );
+  const getAssigmentById = useCallback(
+    (id?: string) => assignmentsMap.get(id || ""),
+    [assignmentsMap]
+  );
+  const getStaffById = useCallback(
+    (id?: string) => staffMap.get(id || ""),
+    [staffMap]
+  );
+
+  const getDatesBetween = useCallback((startDate: string, endDate: string) => {
+    const dates: string[] = [];
+    let current = dayjs(startDate, "DD.MM.YYYY", true);
+    const end = dayjs(endDate, "DD.MM.YYYY", true);
+    while (current.isBefore(end) || current.isSame(end)) {
+      dates.push(current.format("DD-MM-YYYY"));
+      current = current.add(1, "day");
+    }
+    return dates;
+  }, []);
+
+  const generateStaffBasedCalendar = useCallback(() => {
+    if (!selectedStaffId) {
+      setEvents([]);
+      setHighlightedDates([]);
+      return;
     }
 
-    return dates;
-  };
-
-  const generateStaffBasedCalendar = () => {
     const works: EventInput[] = [];
 
-    const filteredAssignments =
-      schedule?.assignments?.filter(
-        (assign) => assign.staffId === selectedStaffId
-      ) || [];
+    const filteredAssignments = (schedule?.assignments || []).filter(
+      (assign: any) => assign.staffId === selectedStaffId
+    );
 
-    const baseColor = staffColors.get(selectedStaffId || "") || "#19979c";
+    const baseColor = staffColors.get(selectedStaffId) || "#19979c";
 
     for (let i = 0; i < filteredAssignments.length; i++) {
-      const assignmentDate = dayjs
-        .utc(filteredAssignments[i]?.shiftStart)
-        .format("YYYY-MM-DD");
-      const isValidDate = validDates().includes(assignmentDate);
+      const a = filteredAssignments[i];
+      const assignmentDate = dayjs.utc(a?.shiftStart).format("YYYY-MM-DD");
+      const isValidDate = validDatesMemo.includes(assignmentDate);
 
-      const shift = getShiftById(filteredAssignments[i]?.shiftId);
+      const shift = getShiftById(a?.shiftId);
       const eventColor = getEventColor(baseColor, shift?.name || "");
 
-      const work = {
-        id: filteredAssignments[i]?.id,
-        title: getShiftById(filteredAssignments[i]?.shiftId)?.name,
+      const work: any = {
+        id: a?.id,
+        title: shift?.name,
         duration: "01:00",
         date: assignmentDate,
-        staffId: filteredAssignments[i]?.staffId,
-        shiftId: filteredAssignments[i]?.shiftId,
+        staffId: a?.staffId,
+        shiftId: a?.shiftId,
         backgroundColor: eventColor,
         borderColor: eventColor,
         extendedProps: {
-          shiftStart: filteredAssignments[i]?.shiftStart,
-          shiftEnd: filteredAssignments[i]?.shiftEnd,
+          shiftStart: a?.shiftStart,
+          shiftEnd: a?.shiftEnd,
         },
         className: `event ${
-          getAssigmentById(filteredAssignments[i]?.id)?.isUpdated
-            ? "highlight"
-            : ""
+          getAssigmentById(a?.id)?.isUpdated ? "highlight" : ""
         } ${!isValidDate ? "invalid-date" : ""}`,
       };
+
       works.push(work);
     }
 
-    const offDays = schedule?.staffs?.find(
-      (staff) => staff.id === selectedStaffId
-    )?.offDays;
+    const offDays = getStaffById(selectedStaffId)?.offDays;
 
     const dates = getDatesBetween(
       dayjs(schedule.scheduleStartDate).format("DD.MM.YYYY"),
       dayjs(schedule.scheduleEndDate).format("DD.MM.YYYY")
     );
-    const highlightedDates: { pairStaffId: string; date: string }[] = [];
 
-    const staff = schedule?.staffs?.find((s) => s.id === selectedStaffId);
+    const highlighted: { pairStaffId: string; date: string }[] = [];
+    const staff = getStaffById(selectedStaffId);
 
     dates.forEach((date) => {
       const currentDate = dayjs(date, "DD-MM-YYYY");
       const transformedDate = currentDate.format("DD.MM.YYYY");
 
-      if (offDays?.includes(transformedDate)) {
-        return;
-      }
+      if (offDays?.includes(transformedDate)) return;
 
-      const pairList = staff?.pairList?.find((pair) => {
+      const pairList = staff?.pairList?.find((pair: any) => {
         const pairStart = dayjs(pair.startDate, "DD.MM.YYYY");
         const pairEnd = dayjs(pair.endDate, "DD.MM.YYYY");
 
@@ -229,13 +221,50 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
         );
       });
 
-      if (pairList) {
-        highlightedDates.push({ pairStaffId: pairList.staffId, date });
-      }
+      if (pairList) highlighted.push({ pairStaffId: pairList.staffId, date });
     });
 
-    setHighlightedDates(highlightedDates);
+    setHighlightedDates(highlighted);
     setEvents(works);
+  }, [
+    selectedStaffId,
+    schedule?.assignments,
+    schedule?.scheduleStartDate,
+    schedule?.scheduleEndDate,
+    staffColors,
+    getAssigmentById,
+    getShiftById,
+    getStaffById,
+    getDatesBetween,
+    validDatesMemo,
+  ]);
+
+  // Event drop handler
+  const handleEventDrop = (info: any) => {
+    const assignmentId = info.event.id as string;
+    const newDate = dayjs(info.event.start);
+
+    const shift = getShiftById(info.event.extendedProps?.shiftId);
+    if (!shift) return;
+
+    const [startHour, startMinute] = shift.shiftStart.split(":");
+    const [endHour, endMinute] = shift.shiftEnd.split(":");
+
+    const newShiftStart = newDate
+      .hour(parseInt(startHour, 10))
+      .minute(parseInt(startMinute, 10))
+      .second(0)
+      .toISOString();
+
+    const newShiftEnd = newDate
+      .hour(parseInt(endHour, 10))
+      .minute(parseInt(endMinute, 10))
+      .second(0)
+      .toISOString();
+
+    dispatch(
+      updateAssignmentDate(assignmentId, newShiftStart, newShiftEnd) as any
+    );
   };
 
   const handleEventClick = (clickInfo: EventClickArg) => {
@@ -250,7 +279,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
       date: dayjs(event.start).format("DD.MM.YYYY"),
       startTime: dayjs(event.extendedProps.shiftStart).format("HH:mm"),
       endTime: dayjs(event.extendedProps.shiftEnd).format("HH:mm"),
-      color: event.backgroundColor || "#19979c",
+      color: (event.backgroundColor as string) || "#19979c",
     };
 
     setEventDetails(details);
@@ -263,33 +292,14 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
   };
 
   useEffect(() => {
-    if (schedule?.staffs?.length > 0) {
-      const colorMap = new Map<string, string>();
-      schedule.staffs.forEach((staff) => {
-        colorMap.set(staff.id, generateStaffColor(staff.id));
-      });
-      setStaffColors(colorMap);
-
-      if (!selectedStaffId) {
-        const firstStaffId = schedule.staffs[0].id;
-        setSelectedStaffId(firstStaffId);
-      }
+    if (schedule?.staffs?.length > 0 && !selectedStaffId) {
+      setSelectedStaffId(schedule.staffs[0].id);
     }
-  }, [schedule?.staffs]);
+  }, [schedule?.staffs, selectedStaffId]);
 
   useEffect(() => {
-    if (selectedStaffId) {
-      generateStaffBasedCalendar();
-    }
-  }, [selectedStaffId, schedule?.assignments]);
-
-  const RenderEventContent = ({ eventInfo }: any) => {
-    return (
-      <div className="event-content">
-        <p>{eventInfo.event.title}</p>
-      </div>
-    );
-  };
+    generateStaffBasedCalendar();
+  }, [generateStaffBasedCalendar]);
 
   return (
     <div className="calendar-section">
@@ -354,7 +364,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
             <RenderEventContent eventInfo={eventInfo} />
           )}
           dayCellContent={({ date }) => {
-            const found = validDates().includes(
+            const found = validDatesMemo.includes(
               dayjs(date).format("YYYY-MM-DD")
             );
 
