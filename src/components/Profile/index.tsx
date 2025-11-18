@@ -9,8 +9,8 @@ type ProfileCardProps = {
 const ProfileCard = ({ profile }: ProfileCardProps) => {
   return (
     <div className="profile-section">
+      <img className="profile-avatar" src={"/avatar.png"} alt="avatar" />
       <div className="profile-info">
-        {/* Burada kullanıcı ismini de profil yüklenene kadar bellekten data ekliyoruz */}
         <h2>Welcome, {profile?.name ?? AuthSession.getName()}</h2>
         <p>{profile?.email ?? AuthSession.getEmail()}</p>
         <p>{profile?.role?.name ?? AuthSession.getRoles()}</p>
