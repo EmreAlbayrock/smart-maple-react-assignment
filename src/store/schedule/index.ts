@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Action } from 'redux-actions';
+import type { Action } from "redux-actions";
 
-import { handleActions } from 'redux-actions';
+import { handleActions } from "redux-actions";
 
-import types from './types';
+import types from "./types";
 
-import type { ErrorBE } from '../../utils/types';
-import type { ScheduleInstance } from '../../models/schedule';
+import type { ScheduleInstance } from "../../models/schedule";
+import type { ErrorBE } from "../../utils/types";
 
 export interface ScheduleState {
   errors: ErrorBE;
@@ -39,6 +39,36 @@ const scheduleReducer: any = {
     loading: false,
     errors: payload,
   }),
+
+  [types.UPDATE_ASSIGNMENT_DATE]: (
+    state: ScheduleState,
+    {
+      payload,
+    }: Action<{
+      assignmentId: string;
+      newShiftStart: string;
+      newShiftEnd: string;
+    }>
+  ): ScheduleState => {
+    const { assignmentId, newShiftStart, newShiftEnd } = payload;
+
+    return {
+      ...state,
+      schedule: {
+        ...state.schedule,
+        assignments: state.schedule.assignments.map((assignment) =>
+          assignment.id === assignmentId
+            ? {
+                ...assignment,
+                shiftStart: newShiftStart,
+                shiftEnd: newShiftEnd,
+                isUpdated: true,
+              }
+            : assignment
+        ),
+      },
+    };
+  },
 };
 
 export default handleActions(scheduleReducer, initialState) as any;

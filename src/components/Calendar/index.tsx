@@ -6,6 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import type { ScheduleInstance } from "../../models/schedule";
 import type { UserInstance } from "../../models/user";
 
+import { useDispatch } from "react-redux";
+import { updateAssignmentDate } from "../../store/schedule/actions";
+
 import FullCalendar from "@fullcalendar/react";
 
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -54,6 +57,8 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
   const [showModal, setShowModal] = useState(false);
   const [eventDetails, setEventDetails] = useState<EventDetails>(null);
 
+  const dispatch = useDispatch();
+
   const getPlugins = () => {
     const plugins = [dayGridPlugin];
     plugins.push(interactionPlugin);
@@ -83,6 +88,35 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
     const lightness = isNightShift ? 25 : 50;
 
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  };
+
+  // Event taşıma handler'ı
+  const handleEventDrop = (info: any) => {
+    const assignmentId = info.event.id;
+    const newDate = dayjs(info.event.start);
+
+    const shift = getShiftById(info.event.extendedProps.shiftId);
+
+    if (!shift) return;
+
+    const [startHour, startMinute] = shift.shiftStart.split(":");
+    const [endHour, endMinute] = shift.shiftEnd.split(":");
+
+    const newShiftStart = newDate
+      .hour(parseInt(startHour))
+      .minute(parseInt(startMinute))
+      .second(0)
+      .toISOString();
+
+    const newShiftEnd = newDate
+      .hour(parseInt(endHour))
+      .minute(parseInt(endMinute))
+      .second(0)
+      .toISOString();
+
+    dispatch(
+      updateAssignmentDate(assignmentId, newShiftStart, newShiftEnd) as any
+    );
   };
 
   const getShiftById = (id: string) => {
@@ -229,20 +263,25 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
   };
 
   useEffect(() => {
-    const colorMap = new Map<string, string>();
-    schedule?.staffs?.forEach((staff) => {
-      colorMap.set(staff.id, generateStaffColor(staff.id));
-    });
-    setStaffColors(colorMap);
+    if (schedule?.staffs?.length > 0) {
+      const colorMap = new Map<string, string>();
+      schedule.staffs.forEach((staff) => {
+        colorMap.set(staff.id, generateStaffColor(staff.id));
+      });
+      setStaffColors(colorMap);
 
-    const firstStaffId = schedule?.staffs?.[0]?.id;
-    setSelectedStaffId(firstStaffId);
-    generateStaffBasedCalendar();
-  }, [schedule]);
+      if (!selectedStaffId) {
+        const firstStaffId = schedule.staffs[0].id;
+        setSelectedStaffId(firstStaffId);
+      }
+    }
+  }, [schedule?.staffs]);
 
   useEffect(() => {
-    generateStaffBasedCalendar();
-  }, [selectedStaffId]);
+    if (selectedStaffId) {
+      generateStaffBasedCalendar();
+    }
+  }, [selectedStaffId, schedule?.assignments]);
 
   const RenderEventContent = ({ eventInfo }: any) => {
     return (
@@ -299,7 +338,7 @@ const CalendarContainer = ({ schedule, auth }: CalendarContainerProps) => {
           handleWindowResize={true}
           selectable={true}
           editable={true}
-          eventChange={(event) => console.log(event.event.id)}
+          eventDrop={handleEventDrop}
           eventOverlap={true}
           eventDurationEditable={false}
           initialView="dayGridMonth"
